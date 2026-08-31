@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS appointments (
   person_name TEXT NOT NULL,
   appointment_type TEXT NOT NULL DEFAULT 'Interview',
   notes TEXT,
+  confirmation_status TEXT NOT NULL DEFAULT 'tentative' CHECK (confirmation_status IN ('tentative','confirmed')),
   status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled','completed','cancelled','no_show','needs_rescheduling')),
   created_by BIGINT REFERENCES users(id),
   updated_by BIGINT REFERENCES users(id),
@@ -46,6 +47,23 @@ CREATE TABLE IF NOT EXISTS appointments (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (end_at > start_at)
 );
+
+-- Migration for databases created before confirmation_status existed.
+-- Existing appointments are treated as confirmed; new appointments default to tentative.
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS confirmation_status TEXT NOT NULL DEFAULT 'confirmed';
+ALTER TABLE appointments ALTER COLUMN confirmation_status SET DEFAULT 'tentative';
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'appointments_confirmation_status_check'
+      AND conrelid = 'appointments'::regclass
+  ) THEN
+    ALTER TABLE appointments
+      ADD CONSTRAINT appointments_confirmation_status_check
+      CHECK (confirmation_status IN ('tentative','confirmed'));
+  END IF;
+END $$;
 
 ALTER TABLE appointments DROP CONSTRAINT IF EXISTS appointments_no_overlap;
 ALTER TABLE appointments ADD CONSTRAINT appointments_no_overlap
