@@ -1,0 +1,16 @@
+{
+  "name": "bishop-interview-calendar",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Simple bishop interview scheduling calendar",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.4"
+  },
+  "devDependencies": {
+    "wrangler": "^3.90.0"
+  }
+}
