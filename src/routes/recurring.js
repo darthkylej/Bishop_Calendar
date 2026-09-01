@@ -80,8 +80,7 @@ export async function update(request,env,user,id){
 export async function assign(request,env,user,id){
   if(!isBishop(user)) return error('Forbidden.',403);
   const d=await body(request); if(!d) return error('Invalid request.');
-  const counselor=String(d.counselor_name||'').trim();
-  if(!counselor) return error('Enter the counselor name.');
+  const counselor=String(d.counselor_name||'').trim()||null;
   const sql=db(env); await ensureNeedSchema(sql);
   const r=await sql`UPDATE recurring_interviews SET assigned_to_counselor=${counselor},updated_at=now() WHERE id=${id} AND active=true RETURNING *`;
   if(!r[0]) return error('Appointment need not found.',404);
