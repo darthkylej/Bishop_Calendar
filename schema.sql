@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS availability_overrides (
 CREATE TABLE IF NOT EXISTS recurring_interviews (
   id BIGSERIAL PRIMARY KEY,
   person_name TEXT NOT NULL,
+  appointment_type TEXT NOT NULL DEFAULT 'Interview',
   frequency_count INTEGER NOT NULL CHECK (frequency_count > 0),
   frequency_unit TEXT NOT NULL CHECK (frequency_unit IN ('days','weeks','months')),
   next_due_date DATE NOT NULL,
@@ -69,6 +70,7 @@ CREATE TABLE IF NOT EXISTS appointments (
 ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE recurring_interviews ADD COLUMN IF NOT EXISTS one_time BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE recurring_interviews ADD COLUMN IF NOT EXISTS assigned_to_counselor TEXT;
+ALTER TABLE recurring_interviews ADD COLUMN IF NOT EXISTS appointment_type TEXT NOT NULL DEFAULT 'Interview';
 
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS confirmation_status TEXT NOT NULL DEFAULT 'confirmed';
 ALTER TABLE appointments ALTER COLUMN confirmation_status SET DEFAULT 'confirmed';
