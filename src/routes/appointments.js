@@ -2,7 +2,10 @@ import { db } from '../lib/db.js';
 import { body, error, json } from '../lib/util.js';
 import { canSchedule, isBishop } from '../lib/auth.js';
 
-async function ensureNeedSchema(sql){ await sql`ALTER TABLE recurring_interviews ADD COLUMN IF NOT EXISTS one_time BOOLEAN NOT NULL DEFAULT FALSE`; }
+async function ensureNeedSchema(sql){
+  await sql`ALTER TABLE recurring_interviews ADD COLUMN IF NOT EXISTS one_time BOOLEAN NOT NULL DEFAULT FALSE`;
+  await sql`ALTER TABLE recurring_interviews ADD COLUMN IF NOT EXISTS assigned_to_counselor TEXT`;
+}
 function hhmm(date, tz){ return new Intl.DateTimeFormat('en-US',{timeZone:tz,hour:'2-digit',minute:'2-digit',hour12:false}).format(date); }
 function ymd(date,tz){ const p=new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(date); const o=Object.fromEntries(p.map(x=>[x.type,x.value])); return `${o.year}-${o.month}-${o.day}`; }
 function dow(date,tz){ const name=new Intl.DateTimeFormat('en-US',{timeZone:tz,weekday:'short'}).format(date); return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(name); }
@@ -63,7 +66,12 @@ export async function create(request,env,user){
   const settings=await sql`SELECT key,value FROM settings`; const sm=Object.fromEntries(settings.map(x=>[x.key,x.value])); const tz=sm.timezone||'America/Chicago';
   if(!isBishop(user) && !await isAvailable(sql,d.start_at,d.end_at,tz)) return error('That time is outside the bishop’s available hours.',409);
   const recurringId=d.recurring_interview_id?Number(d.recurring_interview_id):null;
-  if(recurringId){ await ensureNeedSchema(sql); const rr=(await sql`SELECT id FROM recurring_interviews WHERE id=${recurringId} AND active=true`)[0]; if(!rr)return error('That appointment need is no longer active.',409); }
+  if(recurringId){
+    await ensureNeedSchema(sql);
+    const rr=(await sql`SELECT id,assigned_to_counselor FROM recurring_interviews WHERE id=${recurringId} AND active=true`)[0];
+    if(!rr)return error('That appointment need is no longer active.',409);
+    if(rr.assigned_to_counselor)return error(`That appointment need has been assigned to ${rr.assigned_to_counselor}.`,409);
+  }
   try{
     const r=await sql`INSERT INTO appointments(start_at,end_at,person_name,appointment_type,notes,confirmation_status,recurring_interview_id,created_by,updated_by) VALUES(${d.start_at},${d.end_at},${String(d.person_name||'').trim()},${d.appointment_type||'Interview'},${d.notes||null},${confirmation(d.confirmation_status)},${recurringId},${user.id},${user.id}) RETURNING *`;
     if(recurringId) await coverRecurring(sql,recurringId,ymd(new Date(d.start_at),tz));
