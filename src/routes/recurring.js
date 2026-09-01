@@ -6,6 +6,9 @@ async function ensureNeedSchema(sql){
   await sql`ALTER TABLE recurring_interviews ADD COLUMN IF NOT EXISTS one_time BOOLEAN NOT NULL DEFAULT FALSE`;
   await sql`ALTER TABLE recurring_interviews ADD COLUMN IF NOT EXISTS assigned_to_counselor TEXT`;
 }
+async function ensureAppointmentSchema(sql){
+  await sql`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS recurring_due_date DATE`;
+}
 function validYmd(s){ return /^\d{4}-\d{2}-\d{2}$/.test(String(s||'')); }
 function ymdValue(v){
   if(v instanceof Date && Number.isFinite(+v)) return v.toISOString().slice(0,10);
@@ -24,6 +27,13 @@ function advance(s,count,unit){
   else d.setUTCMonth(d.getUTCMonth()+count);
   return ymdUtc(d);
 }
+function retreat(s,count,unit){
+  const d=dateUtc(s);
+  if(unit==='days') d.setUTCDate(d.getUTCDate()-count);
+  else if(unit==='weeks') d.setUTCDate(d.getUTCDate()-count*7);
+  else d.setUTCMonth(d.getUTCMonth()-count);
+  return ymdUtc(d);
+}
 function dayDiff(a,b){ return Math.floor((dateUtc(b)-dateUtc(a))/86400000); }
 function cleanFrequency(d){
   const count=Number(d.frequency_count),unit=String(d.frequency_unit||'');
@@ -31,18 +41,57 @@ function cleanFrequency(d){
   if(!['days','weeks','months'].includes(unit)) return null;
   return {count,unit};
 }
+function nextCoveredDue(due,appointmentDate,count,unit){
+  const earlyLimit=addDays(appointmentDate,14); let next=due,guard=0;
+  if(next>earlyLimit) return next;
+  do { next=advance(next,count,unit); guard++; } while(next<=earlyLimit&&guard<500);
+  return next;
+}
+function inferCoveredDue(currentDue,appointmentDate,count,unit){
+  const earlyLimit=addDays(appointmentDate,14);
+  if(currentDue<=earlyLimit) return currentDue;
+  let candidate=currentDue,previous=retreat(candidate,count,unit),guard=0;
+  while(previous>earlyLimit&&guard<500){candidate=previous;previous=retreat(candidate,count,unit);guard++;}
+  return previous;
+}
+async function reconcileLegacyAppointments(sql){
+  await ensureAppointmentSchema(sql);
+  const rows=await sql`SELECT a.id AS appointment_id,a.start_at,a.recurring_interview_id,
+      r.frequency_count,r.frequency_unit,r.next_due_date,r.one_time
+    FROM appointments a
+    JOIN recurring_interviews r ON r.id=a.recurring_interview_id
+    WHERE a.recurring_interview_id IS NOT NULL
+      AND a.recurring_due_date IS NULL
+      AND a.status<>'cancelled'
+    ORDER BY a.start_at,a.id`;
+  for(const row of rows){
+    const currentDue=ymdValue(row.next_due_date); if(!validYmd(currentDue)) continue;
+    const appointmentDate=ymdValue(row.start_at); if(!validYmd(appointmentDate)) continue;
+    if(row.one_time){
+      await sql`UPDATE appointments SET recurring_due_date=${currentDue} WHERE id=${row.appointment_id} AND recurring_due_date IS NULL`;
+      continue;
+    }
+    const count=Number(row.frequency_count),unit=row.frequency_unit;
+    const coveredDue=inferCoveredDue(currentDue,appointmentDate,count,unit);
+    await sql`UPDATE appointments SET recurring_due_date=${coveredDue} WHERE id=${row.appointment_id} AND recurring_due_date IS NULL`;
+    if(currentDue<=addDays(appointmentDate,14)){
+      const next=nextCoveredDue(currentDue,appointmentDate,count,unit);
+      if(next!==currentDue) await sql`UPDATE recurring_interviews SET next_due_date=${next},updated_at=now() WHERE id=${row.recurring_interview_id} AND next_due_date=${currentDue}::date`;
+    }
+  }
+}
 
 export async function list(request,env,user){
   if(!canSchedule(user)) return error('Forbidden.',403);
   const u=new URL(request.url),week=u.searchParams.get('week');
   if(!validYmd(week)) return error('Invalid week.');
-  const weekEnd=addDays(week,6),earlyEnd=addDays(weekEnd,14),sql=db(env); await ensureNeedSchema(sql);
+  const weekEnd=addDays(week,6),earlyEnd=addDays(weekEnd,14),sql=db(env); await ensureNeedSchema(sql); await reconcileLegacyAppointments(sql);
   const rows=isBishop(user)
     ? await sql`SELECT r.id,r.person_name,r.frequency_count,r.frequency_unit,r.next_due_date,r.one_time,r.assigned_to_counselor,r.active,
-        EXISTS(SELECT 1 FROM appointments a WHERE a.recurring_interview_id=r.id AND a.status<>'cancelled') AS has_linked_appointment
+        EXISTS(SELECT 1 FROM appointments a WHERE a.recurring_interview_id=r.id AND a.status<>'cancelled' AND a.recurring_due_date IS NOT NULL) AS has_linked_appointment
         FROM recurring_interviews r WHERE r.active=true ORDER BY r.next_due_date,r.person_name`
     : await sql`SELECT r.id,r.person_name,r.frequency_count,r.frequency_unit,r.next_due_date,r.one_time,r.assigned_to_counselor,r.active,
-        EXISTS(SELECT 1 FROM appointments a WHERE a.recurring_interview_id=r.id AND a.status<>'cancelled') AS has_linked_appointment
+        EXISTS(SELECT 1 FROM appointments a WHERE a.recurring_interview_id=r.id AND a.status<>'cancelled' AND a.recurring_due_date IS NOT NULL) AS has_linked_appointment
         FROM recurring_interviews r WHERE r.active=true AND r.next_due_date <= ${earlyEnd}::date ORDER BY r.next_due_date,r.person_name`;
   const visibleRows=rows.filter(r=>!r.has_linked_appointment || (!r.one_time && ymdValue(r.next_due_date)<=earlyEnd));
   const items=visibleRows.map(r=>{
