@@ -3,7 +3,14 @@ import { body, error, json } from '../lib/util.js';
 import { canSchedule, isBishop } from '../lib/auth.js';
 
 function validYmd(s){ return /^\d{4}-\d{2}-\d{2}$/.test(String(s||'')); }
-function dateUtc(s){ const [y,m,d]=String(s).split('-').map(Number); return new Date(Date.UTC(y,m-1,d)); }
+function ymdValue(v){
+  if(v instanceof Date && Number.isFinite(+v)) return v.toISOString().slice(0,10);
+  const s=String(v??''),m=s.match(/^(\d{4}-\d{2}-\d{2})/);
+  if(m) return m[1];
+  const d=new Date(s);
+  return Number.isFinite(+d)?d.toISOString().slice(0,10):'';
+}
+function dateUtc(s){ const v=ymdValue(s); if(!v)return new Date(NaN); const [y,m,d]=v.split('-').map(Number); return new Date(Date.UTC(y,m-1,d)); }
 function ymdUtc(d){ return d.toISOString().slice(0,10); }
 function addDays(s,n){ const d=dateUtc(s); d.setUTCDate(d.getUTCDate()+n); return ymdUtc(d); }
 function advance(s,count,unit){
@@ -30,7 +37,8 @@ export async function list(request,env,user){
     FROM recurring_interviews WHERE active=true AND next_due_date <= ${earlyEnd}::date
     ORDER BY next_due_date,person_name`;
   const items=rows.map(r=>{
-    const due=String(r.next_due_date).slice(0,10);
+    const due=ymdValue(r.next_due_date);
+    if(!validYmd(due)) throw new Error('Invalid recurring interview due date returned from database.');
     let state='upcoming',overdue_weeks=0;
     if(due<week){ state='overdue'; overdue_weeks=Math.max(1,Math.floor(dayDiff(due,week)/7)+1); }
     else if(due<=weekEnd) state='due';
@@ -47,7 +55,7 @@ export async function create(request,env,user){
   const sql=db(env);
   const r=await sql`INSERT INTO recurring_interviews(person_name,frequency_count,frequency_unit,next_due_date,created_by)
     VALUES(${name},${freq.count},${freq.unit},${due},${user.id}) RETURNING *`;
-  return json({item:r[0]},201);
+  return json({item:{...r[0],next_due_date:ymdValue(r[0].next_due_date)}},201);
 }
 
 export async function update(request,env,user,id){
@@ -57,19 +65,20 @@ export async function update(request,env,user,id){
   if(!old) return error('Recurring interview not found.',404);
   const name=d.person_name===undefined?old.person_name:String(d.person_name||'').trim();
   const freq=d.frequency_count===undefined&&d.frequency_unit===undefined?{count:old.frequency_count,unit:old.frequency_unit}:cleanFrequency({frequency_count:d.frequency_count??old.frequency_count,frequency_unit:d.frequency_unit??old.frequency_unit});
-  const due=d.next_due_date===undefined?String(old.next_due_date).slice(0,10):String(d.next_due_date||'');
+  const due=d.next_due_date===undefined?ymdValue(old.next_due_date):String(d.next_due_date||'');
   if(!name||!freq||!validYmd(due)) return error('Invalid recurring interview settings.');
   const r=await sql`UPDATE recurring_interviews SET person_name=${name},frequency_count=${freq.count},frequency_unit=${freq.unit},next_due_date=${due},updated_at=now() WHERE id=${id} RETURNING *`;
-  return json({item:r[0]});
+  return json({item:{...r[0],next_due_date:ymdValue(r[0].next_due_date)}});
 }
 
 export async function skip(request,env,user,id){
   if(!isBishop(user)) return error('Forbidden.',403);
   const sql=db(env),row=(await sql`SELECT * FROM recurring_interviews WHERE id=${id} AND active=true`)[0];
   if(!row) return error('Recurring interview not found.',404);
-  const next=advance(String(row.next_due_date).slice(0,10),Number(row.frequency_count),row.frequency_unit);
+  const due=ymdValue(row.next_due_date); if(!validYmd(due)) return error('Recurring interview has an invalid due date.',500);
+  const next=advance(due,Number(row.frequency_count),row.frequency_unit);
   const r=await sql`UPDATE recurring_interviews SET next_due_date=${next},updated_at=now() WHERE id=${id} RETURNING *`;
-  return json({item:r[0]});
+  return json({item:{...r[0],next_due_date:ymdValue(r[0].next_due_date)}});
 }
 
 export async function remove(request,env,user,id){
