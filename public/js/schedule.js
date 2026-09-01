@@ -4,12 +4,13 @@ const $=id=>document.getElementById(id);
 const els={
   weekTitle:$('weekTitle'),calendar:$('calendar'),prev:$('prev'),today:$('today'),next:$('next'),schedulePrompt:$('schedulePrompt'),
   recurringBtn:$('recurringBtn'),recurringDrawer:$('recurringDrawer'),closeRecurring:$('closeRecurring'),recurringWeek:$('recurringWeek'),recurringMsg:$('recurringMsg'),recurringList:$('recurringList'),recurringAdmin:$('recurringAdmin'),recurringAdminTitle:$('recurringAdminTitle'),recurringForm:$('recurringForm'),editingRecurringId:$('editingRecurringId'),recurringName:$('recurringName'),oneTime:$('oneTime'),frequencyFields:$('frequencyFields'),frequencyCount:$('frequencyCount'),frequencyUnit:$('frequencyUnit'),dueDateLabel:$('dueDateLabel'),firstDue:$('firstDue'),cancelRecurringEdit:$('cancelRecurringEdit'),recurringSubmit:$('recurringSubmit'),
+  assignmentDialog:$('assignmentDialog'),closeAssignment:$('closeAssignment'),assignmentTitle:$('assignmentTitle'),assignmentBody:$('assignmentBody'),assignmentForm:$('assignmentForm'),counselorName:$('counselorName'),assignmentComplete:$('assignmentComplete'),markAssignmentComplete:$('markAssignmentComplete'),
   drawer:$('drawer'),closeDrawer:$('closeDrawer'),drawerTitle:$('drawerTitle'),drawerWhen:$('drawerWhen'),drawerMsg:$('drawerMsg'),
   apptForm:$('apptForm'),apptId:$('apptId'),recurringId:$('recurringId'),person:$('person'),startTime:$('startTime'),durations:$('durations'),type:$('type'),
   confirmationStatus:$('confirmationStatus'),notes:$('notes'),statusField:$('statusField'),status:$('status'),cancelAppt:$('cancelAppt')
 };
 
-let user,weekStart,data,duration=15,selectedDate=null,pendingRecurring=null,recurringData=null;
+let user,weekStart,data,duration=15,selectedDate=null,pendingRecurring=null,recurringData=null,assignmentItem=null;
 const tz='America/Chicago';
 const DAY=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
@@ -73,7 +74,7 @@ function showDrawer(){els.drawer.classList.add('show')}
 function hideDrawer(){els.drawer.classList.remove('show');els.drawerMsg.innerHTML=''}
 function setDur(n){duration=n;document.querySelectorAll('.duration').forEach(b=>b.classList.toggle('active',+b.dataset.n===n))}
 function clearPending(){pendingRecurring=null;els.schedulePrompt.hidden=true;els.schedulePrompt.innerHTML=''}
-function setPending(item){pendingRecurring={id:item.id,name:item.person_name};els.schedulePrompt.hidden=false;els.schedulePrompt.innerHTML=`Choose a time for <strong>${esc(item.person_name)}</strong> <button type="button" class="prompt-cancel">Cancel</button>`}
+function setPending(item){if(item.assigned_to_counselor){openAssignment(item);return}pendingRecurring={id:item.id,name:item.person_name};els.schedulePrompt.hidden=false;els.schedulePrompt.innerHTML=`Choose a time for <strong>${esc(item.person_name)}</strong> <button type="button" class="prompt-cancel">Cancel</button>`}
 function openNew(date,time,recurring=null){
   const linked=recurring||pendingRecurring;selectedDate=date;els.apptId.value='';els.recurringId.value=linked?.id||'';els.person.value=linked?.name||'';els.startTime.value=time;els.type.value='Interview';els.confirmationStatus.value='confirmed';els.notes.value='';els.status.value='scheduled';els.statusField.style.display='none';els.cancelAppt.style.display='none';els.drawerTitle.textContent='Schedule appointment';els.drawerWhen.textContent=fmtDate(date);setDur(15);clearPending();showDrawer();if(!linked)els.person.focus();
 }
@@ -89,10 +90,12 @@ async function refreshRecurringBadge(){
   try{const d=await fetchRecurring(),n=d.items.filter(i=>i.state!=='upcoming').length;els.recurringBtn.textContent=n?`Appointments Needed · ${n}`:'Appointments Needed';els.recurringBtn.classList.toggle('has-due',n>0)}catch{els.recurringBtn.textContent='Appointments Needed'}
 }
 function recurringItemHtml(i){
-  const overdue=i.state==='overdue',urgent=overdue&&i.overdue_weeks>=2;
-  if(user.role!=='bishop')return `<div class="recurring-item ${i.state} ${urgent?'urgent':''}"><div class="recurring-pick choose-recurring-card" data-id="${i.id}" role="button" tabindex="0"><strong>${esc(i.person_name)}</strong><span>Due ${esc(shortDate(i.next_due_date))}</span></div></div>`;
-  const skip=i.one_time?'':`<button type="button" class="btn mini skip-recurring" data-id="${i.id}">Skip</button>`;
-  return `<div class="recurring-item compact ${i.state} ${urgent?'urgent':''}"><div class="recurring-row"><div class="recurring-pick choose-recurring-card" data-id="${i.id}" role="button" tabindex="0"><strong>${esc(i.person_name)}</strong></div><div class="recurring-actions"><button type="button" class="btn mini edit-recurring" data-id="${i.id}">Edit</button>${skip}<button type="button" class="btn mini danger remove-recurring" data-id="${i.id}">Remove</button></div></div><div class="recurring-meta choose-recurring-card" data-id="${i.id}" role="button" tabindex="0">Due ${esc(shortDate(i.next_due_date))} · ${esc(frequencyLabel(i))}</div></div>`;
+  const overdue=i.state==='overdue',urgent=overdue&&i.overdue_weeks>=2,assigned=!!i.assigned_to_counselor,pickClass=assigned?'assigned-recurring-card':'choose-recurring-card';
+  if(user.role!=='bishop')return `<div class="recurring-item ${i.state} ${urgent?'urgent':''} ${assigned?'assigned':''}"><div class="recurring-pick ${pickClass}" data-id="${i.id}" role="button" tabindex="0"><strong>${esc(i.person_name)}</strong><span>${assigned?`Assigned to ${esc(i.assigned_to_counselor)} · `:''}Due ${esc(shortDate(i.next_due_date))}</span></div></div>`;
+  const skip=!assigned&&!i.one_time?`<button type="button" class="btn mini skip-recurring" data-id="${i.id}">Skip</button>`:'';
+  const assign=!assigned?`<button type="button" class="btn mini assign-recurring" data-id="${i.id}">Assign</button>`:'';
+  const assignment=assigned?`Assigned to ${esc(i.assigned_to_counselor)} · `:'';
+  return `<div class="recurring-item compact ${i.state} ${urgent?'urgent':''} ${assigned?'assigned':''}"><div class="recurring-row"><div class="recurring-pick ${pickClass}" data-id="${i.id}" role="button" tabindex="0"><strong>${esc(i.person_name)}</strong></div><div class="recurring-actions"><button type="button" class="btn mini edit-recurring" data-id="${i.id}">Edit</button>${assign}${skip}<button type="button" class="btn mini danger remove-recurring" data-id="${i.id}">Remove</button></div></div><div class="recurring-meta ${pickClass}" data-id="${i.id}" role="button" tabindex="0">${assignment}Due ${esc(shortDate(i.next_due_date))} · ${esc(frequencyLabel(i))}</div></div>`;
 }
 function renderRecurring(){
   const items=recurringData?.items||[];
@@ -114,6 +117,13 @@ async function openRecurring(){
   try{await fetchRecurring();renderRecurring()}catch(x){els.recurringList.innerHTML='';els.recurringMsg.innerHTML=`<div class="notice error">${esc(x.message)}</div>`}
 }
 function closeRecurring(){els.recurringDrawer.classList.remove('show');els.recurringMsg.innerHTML=''}
+function openAssignment(item,assigning=false){
+  assignmentItem=item;els.assignmentDialog.classList.add('show');const assigned=!!item.assigned_to_counselor;
+  els.assignmentTitle.textContent=assigned?'Counselor assignment':'Assign to counselor';
+  els.assignmentBody.innerHTML=assigned?`<p><strong>${esc(item.person_name)}</strong> has been assigned to <strong>${esc(item.assigned_to_counselor)}</strong>.</p><p class="subtle">Due ${esc(shortDate(item.next_due_date))}. This item is no longer schedulable on the bishop’s calendar.</p>`:`<p>Assign <strong>${esc(item.person_name)}</strong> to a counselor. The executive secretary will see the assignment and this item will no longer be schedulable on the bishop’s calendar.</p>`;
+  els.assignmentForm.hidden=assigned||user.role!=='bishop';els.assignmentComplete.hidden=!assigned;els.counselorName.value='';if(!assigned&&user.role==='bishop')setTimeout(()=>els.counselorName.focus(),0);
+}
+function closeAssignment(){els.assignmentDialog.classList.remove('show');assignmentItem=null;els.counselorName.value=''}
 
 els.calendar.addEventListener('click',e=>{
   const appt=e.target.closest('.appt');if(appt){const a=data.appointments.find(x=>String(x.id)===appt.dataset.apptId);if(a)openExisting(a);return}
@@ -127,17 +137,29 @@ els.recurringList.addEventListener('click',async e=>{
   const action=e.target.closest('button[data-id]');
   if(action){const item=recurringData?.items.find(i=>String(i.id)===action.dataset.id);if(!item)return;
     if(action.classList.contains('edit-recurring')){editRecurring(item);return}
+    if(action.classList.contains('assign-recurring')){openAssignment(item,true);return}
     if(action.classList.contains('skip-recurring')){if(!confirm(`Skip this occurrence for ${item.person_name}?`))return;try{await api(`/api/recurring/${item.id}/skip`,{method:'POST'});await fetchRecurring();renderRecurring();await refreshRecurringBadge()}catch(x){els.recurringMsg.innerHTML=`<div class="notice error">${esc(x.message)}</div>`}return}
     if(action.classList.contains('remove-recurring')){if(!confirm(`Remove ${item.person_name} from Appointments Needed?`))return;try{await api(`/api/recurring/${item.id}`,{method:'DELETE'});await fetchRecurring();renderRecurring();await refreshRecurringBadge()}catch(x){els.recurringMsg.innerHTML=`<div class="notice error">${esc(x.message)}</div>`}return}
   }
+  const assignedPick=e.target.closest('.assigned-recurring-card');if(assignedPick){const item=recurringData?.items.find(i=>String(i.id)===assignedPick.dataset.id);if(item)openAssignment(item);return}
   const pick=e.target.closest('.choose-recurring-card');if(!pick)return;const item=recurringData?.items.find(i=>String(i.id)===pick.dataset.id);if(item){setPending(item);closeRecurring()}
 });
-els.recurringList.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('.choose-recurring-card')){e.preventDefault();const item=recurringData?.items.find(i=>String(i.id)===e.target.dataset.id);if(item){setPending(item);closeRecurring()}}});
+els.recurringList.addEventListener('keydown',e=>{if(e.key!=='Enter'&&e.key!==' ')return;const assigned=e.target.closest('.assigned-recurring-card');if(assigned){e.preventDefault();const item=recurringData?.items.find(i=>String(i.id)===assigned.dataset.id);if(item)openAssignment(item);return}if(e.target.matches('.choose-recurring-card')){e.preventDefault();const item=recurringData?.items.find(i=>String(i.id)===e.target.dataset.id);if(item){setPending(item);closeRecurring()}}});
 els.oneTime.onchange=syncNeedType;
 els.cancelRecurringEdit.onclick=resetRecurringForm;
 els.recurringForm.onsubmit=async e=>{
   e.preventDefault();els.recurringMsg.innerHTML='';const payload={person_name:els.recurringName.value,one_time:els.oneTime.checked,next_due_date:els.firstDue.value};if(!els.oneTime.checked){payload.frequency_count=Number(els.frequencyCount.value);payload.frequency_unit=els.frequencyUnit.value}const id=els.editingRecurringId.value;
   try{if(id)await api(`/api/recurring/${id}`,{method:'PUT',body:JSON.stringify(payload)});else await api('/api/recurring',{method:'POST',body:JSON.stringify(payload)});resetRecurringForm();await fetchRecurring();renderRecurring();await refreshRecurringBadge();els.recurringName.focus()}catch(x){els.recurringMsg.innerHTML=`<div class="notice error">${esc(x.message)}</div>`}
+};
+
+els.closeAssignment.onclick=closeAssignment;els.assignmentDialog.onclick=e=>{if(e.target===els.assignmentDialog)closeAssignment()};
+els.assignmentForm.onsubmit=async e=>{
+  e.preventDefault();if(!assignmentItem)return;const counselor=els.counselorName.value.trim();if(!counselor)return;
+  try{await api(`/api/recurring/${assignmentItem.id}/assign`,{method:'POST',body:JSON.stringify({counselor_name:counselor})});closeAssignment();await fetchRecurring();renderRecurring();await refreshRecurringBadge()}catch(x){els.assignmentBody.innerHTML+=`<div class="notice error">${esc(x.message)}</div>`}
+};
+els.markAssignmentComplete.onclick=async()=>{
+  if(!assignmentItem)return;if(!confirm(`Mark ${assignmentItem.person_name} complete?`))return;
+  try{await api(`/api/recurring/${assignmentItem.id}/complete`,{method:'POST'});closeAssignment();await fetchRecurring();renderRecurring();await refreshRecurringBadge()}catch(x){els.assignmentBody.innerHTML+=`<div class="notice error">${esc(x.message)}</div>`}
 };
 
 (async()=>{
