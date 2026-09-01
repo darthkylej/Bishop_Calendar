@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS appointments (
   confirmation_status TEXT NOT NULL DEFAULT 'confirmed' CHECK (confirmation_status IN ('tentative','confirmed')),
   status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled','completed','cancelled','no_show','needs_rescheduling')),
   recurring_interview_id BIGINT REFERENCES recurring_interviews(id),
+  recurring_due_date DATE,
   created_by BIGINT REFERENCES users(id),
   updated_by BIGINT REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -71,6 +72,7 @@ ALTER TABLE recurring_interviews ADD COLUMN IF NOT EXISTS assigned_to_counselor 
 
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS confirmation_status TEXT NOT NULL DEFAULT 'confirmed';
 ALTER TABLE appointments ALTER COLUMN confirmation_status SET DEFAULT 'confirmed';
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS recurring_due_date DATE;
 DO $$
 BEGIN
   IF NOT EXISTS (
