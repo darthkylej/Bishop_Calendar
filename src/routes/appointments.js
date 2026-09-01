@@ -7,6 +7,10 @@ function ymd(date,tz){ const p=new Intl.DateTimeFormat('en-CA',{timeZone:tz,year
 function dow(date,tz){ const name=new Intl.DateTimeFormat('en-US',{timeZone:tz,weekday:'short'}).format(date); return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(name); }
 function min(t){ const [h,m]=String(t).slice(0,5).split(':').map(Number); return h*60+m; }
 function confirmation(v, fallback='confirmed'){ return ['tentative','confirmed'].includes(v) ? v : fallback; }
+function dateUtc(s){ const [y,m,d]=String(s).split('-').map(Number); return new Date(Date.UTC(y,m-1,d)); }
+function ymdUtc(d){ return d.toISOString().slice(0,10); }
+function addDays(s,n){ const d=dateUtc(s); d.setUTCDate(d.getUTCDate()+n); return ymdUtc(d); }
+function advanceDate(s,count,unit){ const d=dateUtc(s); if(unit==='days')d.setUTCDate(d.getUTCDate()+count); else if(unit==='weeks')d.setUTCDate(d.getUTCDate()+count*7); else d.setUTCMonth(d.getUTCMonth()+count); return ymdUtc(d); }
 function covered(start,end, intervals, blocks){
   let pts=[start,end]; for(const i of intervals) pts.push(Math.max(start,i.s),Math.min(end,i.e)); for(const b of blocks) pts.push(Math.max(start,b.s),Math.min(end,b.e)); pts=[...new Set(pts.filter(x=>x>=start&&x<=end))].sort((a,b)=>a-b);
   for(let i=0;i<pts.length-1;i++){ const a=pts[i],b=pts[i+1],mid=(a+b)/2; if(b<=a)continue; const avail=intervals.some(x=>mid>=x.s&&mid<x.e); const blocked=blocks.some(x=>mid>=x.s&&mid<x.e); if(!avail||blocked)return false; }
@@ -22,6 +26,16 @@ async function isAvailable(sql,startAt,endAt,tz){
   for(const o of ovs){ const i={s:min(o.start_time),e:min(o.end_time)}; if(o.override_type==='add')ints.push(i); else blocks.push(i); }
   return covered(start,end,ints,blocks);
 }
+async function coverRecurring(sql,id,appointmentDate){
+  if(!id) return;
+  const row=(await sql`SELECT id,frequency_count,frequency_unit,next_due_date FROM recurring_interviews WHERE id=${id} AND active=true`)[0];
+  if(!row) return;
+  let due=String(row.next_due_date).slice(0,10),earlyLimit=addDays(appointmentDate,14),guard=0;
+  if(due>earlyLimit) return;
+  do { due=advanceDate(due,Number(row.frequency_count),row.frequency_unit); guard++; }
+  while(due<=earlyLimit&&guard<500);
+  await sql`UPDATE recurring_interviews SET next_due_date=${due},updated_at=now() WHERE id=${id}`;
+}
 export async function week(request,env,user){
   if(!user)return error('Unauthorized.',401); const u=new URL(request.url); const start=u.searchParams.get('start'); if(!/^\d{4}-\d{2}-\d{2}$/.test(start||'')) return error('Invalid week start.');
   const sql=db(env); const settings=await sql`SELECT key,value FROM settings`; const sm=Object.fromEntries(settings.map(x=>[x.key,x.value]));
@@ -32,9 +46,15 @@ export async function week(request,env,user){
 }
 export async function create(request,env,user){
   if(!canSchedule(user))return error('Forbidden.',403); const d=await body(request); if(!d)return error('Invalid request.'); const sql=db(env);
-  const settings=await sql`SELECT key,value FROM settings`; const sm=Object.fromEntries(settings.map(x=>[x.key,x.value]));
-  if(!isBishop(user) && !await isAvailable(sql,d.start_at,d.end_at,sm.timezone||'America/Chicago')) return error('That time is outside the bishop’s available hours.',409);
-  try{ const r=await sql`INSERT INTO appointments(start_at,end_at,person_name,appointment_type,notes,confirmation_status,created_by,updated_by) VALUES(${d.start_at},${d.end_at},${String(d.person_name||'').trim()},${d.appointment_type||'Interview'},${d.notes||null},${confirmation(d.confirmation_status)},${user.id},${user.id}) RETURNING *`; return json({appointment:r[0]},201); } catch(e){ if(String(e).includes('appointments_no_overlap')||String(e).includes('conflict')) return error('That time overlaps an existing appointment.',409); throw e; }
+  const settings=await sql`SELECT key,value FROM settings`; const sm=Object.fromEntries(settings.map(x=>[x.key,x.value])); const tz=sm.timezone||'America/Chicago';
+  if(!isBishop(user) && !await isAvailable(sql,d.start_at,d.end_at,tz)) return error('That time is outside the bishop’s available hours.',409);
+  const recurringId=d.recurring_interview_id?Number(d.recurring_interview_id):null;
+  if(recurringId){ const rr=(await sql`SELECT id FROM recurring_interviews WHERE id=${recurringId} AND active=true`)[0]; if(!rr)return error('That recurring interview is no longer active.',409); }
+  try{
+    const r=await sql`INSERT INTO appointments(start_at,end_at,person_name,appointment_type,notes,confirmation_status,recurring_interview_id,created_by,updated_by) VALUES(${d.start_at},${d.end_at},${String(d.person_name||'').trim()},${d.appointment_type||'Interview'},${d.notes||null},${confirmation(d.confirmation_status)},${recurringId},${user.id},${user.id}) RETURNING *`;
+    if(recurringId) await coverRecurring(sql,recurringId,ymd(new Date(d.start_at),tz));
+    return json({appointment:r[0]},201);
+  } catch(e){ if(String(e).includes('appointments_no_overlap')||String(e).includes('conflict')) return error('That time overlaps an existing appointment.',409); throw e; }
 }
 export async function update(request,env,user,id){
   if(!canSchedule(user))return error('Forbidden.',403); const d=await body(request); if(!d)return error('Invalid request.'); const sql=db(env);
