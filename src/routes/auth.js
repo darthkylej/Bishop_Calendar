@@ -26,7 +26,6 @@ export async function changePassword(request,env,user){
     const oldPassword=String(data.current_password||'');
     if(!oldPassword || !await verifyPassword(oldPassword,current.password_hash)) return error('Current password is incorrect.',401);
   }
-  if(await verifyPassword(newPassword,current.password_hash)) return error('Choose a different password.');
   const hash=await hashPassword(newPassword);
   const updated=(await sql`UPDATE users SET password_hash=${hash},must_change_password=false,updated_at=now() WHERE id=${user.id} RETURNING id,name,email,role,must_change_password`)[0];
   const token=await createSession(env,updated);
