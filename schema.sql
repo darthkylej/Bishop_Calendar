@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS recurring_interviews (
   frequency_count INTEGER NOT NULL CHECK (frequency_count > 0),
   frequency_unit TEXT NOT NULL CHECK (frequency_unit IN ('days','weeks','months')),
   next_due_date DATE NOT NULL,
+  one_time BOOLEAN NOT NULL DEFAULT FALSE,
   active BOOLEAN NOT NULL DEFAULT TRUE,
   created_by BIGINT REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -64,6 +65,7 @@ CREATE TABLE IF NOT EXISTS appointments (
 
 -- Migrations for existing databases.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE recurring_interviews ADD COLUMN IF NOT EXISTS one_time BOOLEAN NOT NULL DEFAULT FALSE;
 
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS confirmation_status TEXT NOT NULL DEFAULT 'confirmed';
 ALTER TABLE appointments ALTER COLUMN confirmation_status SET DEFAULT 'confirmed';
