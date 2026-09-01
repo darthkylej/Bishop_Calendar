@@ -21,12 +21,18 @@ export async function verifyPassword(password, stored) {
   if(!s || !h) return false;
   return hex(await derive(password, fromHex(s))) === h;
 }
+export async function ensurePasswordSchema(sql){
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE`;
+  await sql`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY,value TEXT NOT NULL)`;
+  const inserted=await sql`INSERT INTO settings(key,value) VALUES('password_change_migration_v1','done') ON CONFLICT (key) DO NOTHING RETURNING key`;
+  if(inserted[0]) await sql`UPDATE users SET must_change_password=true WHERE id<>(SELECT min(id) FROM users)`;
+}
 async function sign(env, data) {
   const key = await crypto.subtle.importKey('raw', enc.encode(env.SESSION_SECRET), {name:'HMAC',hash:'SHA-256'}, false, ['sign']);
   return hex(new Uint8Array(await crypto.subtle.sign('HMAC', key, enc.encode(data))));
 }
 export async function createSession(env, user) {
-  const payload = b64url(JSON.stringify({ userId:user.id, mustChangePassword:!!user.must_change_password, exp:Date.now()+TWO_WEEKS }));
+  const payload = b64url(JSON.stringify({ userId:user.id, exp:Date.now()+TWO_WEEKS }));
   return `${payload}.${await sign(env,payload)}`;
 }
 export async function getSession(request, env) {
@@ -38,9 +44,11 @@ export async function getSession(request, env) {
   let parsed; try { parsed=JSON.parse(unb64url(payload)); } catch { return null; }
   if(Date.now() > parsed.exp) return null;
   const sql = db(env);
-  const rows = await sql`SELECT id,name,email,role,active FROM users WHERE id=${parsed.userId}`;
+  let rows;
+  try { rows=await sql`SELECT id,name,email,role,active,must_change_password FROM users WHERE id=${parsed.userId}`; }
+  catch { await ensurePasswordSchema(sql); rows=await sql`SELECT id,name,email,role,active,must_change_password FROM users WHERE id=${parsed.userId}`; }
   if(!rows[0]?.active) return null;
-  return {...rows[0],must_change_password:!!parsed.mustChangePassword};
+  return rows[0];
 }
 export function cookie(token, clear=false) {
   return `session=${clear?'':token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${clear?0:TWO_WEEKS/1000}`;
