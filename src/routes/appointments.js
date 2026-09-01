@@ -6,7 +6,7 @@ function hhmm(date, tz){ return new Intl.DateTimeFormat('en-US',{timeZone:tz,hou
 function ymd(date,tz){ const p=new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(date); const o=Object.fromEntries(p.map(x=>[x.type,x.value])); return `${o.year}-${o.month}-${o.day}`; }
 function dow(date,tz){ const name=new Intl.DateTimeFormat('en-US',{timeZone:tz,weekday:'short'}).format(date); return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(name); }
 function min(t){ const [h,m]=String(t).slice(0,5).split(':').map(Number); return h*60+m; }
-function confirmation(v, fallback='tentative'){ return ['tentative','confirmed'].includes(v) ? v : fallback; }
+function confirmation(v, fallback='confirmed'){ return ['tentative','confirmed'].includes(v) ? v : fallback; }
 function covered(start,end, intervals, blocks){
   let pts=[start,end]; for(const i of intervals) pts.push(Math.max(start,i.s),Math.min(end,i.e)); for(const b of blocks) pts.push(Math.max(start,b.s),Math.min(end,b.e)); pts=[...new Set(pts.filter(x=>x>=start&&x<=end))].sort((a,b)=>a-b);
   for(let i=0;i<pts.length-1;i++){ const a=pts[i],b=pts[i+1],mid=(a+b)/2; if(b<=a)continue; const avail=intervals.some(x=>mid>=x.s&&mid<x.e); const blocked=blocks.some(x=>mid>=x.s&&mid<x.e); if(!avail||blocked)return false; }
