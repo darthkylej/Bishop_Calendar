@@ -8,7 +8,7 @@ const els={
   confirmationStatus:$('confirmationStatus'),notes:$('notes'),statusField:$('statusField'),status:$('status'),cancelAppt:$('cancelAppt')
 };
 
-let user,weekStart,data,duration=20,selectedDate=null;
+let user,weekStart,data,duration=15,selectedDate=null;
 const tz='America/Chicago';
 const DAY=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
@@ -44,9 +44,9 @@ function render(){
   const minM=Math.max(0,Math.floor(minRaw/15)*15);
   const maxM=Math.min(1440,Math.ceil(maxRaw/15)*15);
   const cols=dates.length+1;
-  let html=`<div class="week-grid" style="grid-template-columns:76px repeat(${dates.length},minmax(140px,1fr));min-width:${Math.max(360,76+dates.length*140)}px"><div class="corner"></div>`;
+  let html=`<div class="week-grid" style="grid-template-columns:minmax(42px,64px) repeat(${dates.length},minmax(0,1fr))"><div class="corner"></div>`;
   const today=localYmd(new Date());
-  dates.forEach(d=>{const i=dateFromYmd(d).getDay();html+=`<div class="day-head ${d===today?'today':''}"><strong>${DAY[i]}</strong><span>${new Intl.DateTimeFormat('en-US',{month:'short',day:'numeric'}).format(dateFromYmd(d))}</span></div>`});
+  dates.forEach(d=>{const i=dateFromYmd(d).getDay();html+=`<div class="day-head ${d===today?'today':''}"><strong>${DAY[i]}</strong><span>${new Intl.DateTimeFormat('en-US',{month:'numeric',day:'numeric'}).format(dateFromYmd(d))}</span></div>`});
   for(let m=minM;m<maxM;m+=15){
     html+=`<div class="time-cell">${m%60===0?new Intl.DateTimeFormat('en-US',{hour:'numeric'}).format(new Date(2000,0,1,Math.floor(m/60))):''}</div>`;
     dates.forEach(date=>{const p=preference(date,m),open=!!p&&['bishop','scheduler'].includes(user.role);html+=`<div class="slot ${p||''} ${open?'open':''}" data-date="${date}" data-time="${hm(m)}" ${open?'role="button" tabindex="0"':''}></div>`});
@@ -69,7 +69,7 @@ function showDrawer(){els.drawer.classList.add('show')}
 function hideDrawer(){els.drawer.classList.remove('show');els.drawerMsg.innerHTML=''}
 function setDur(n){duration=n;document.querySelectorAll('.duration').forEach(b=>b.classList.toggle('active',+b.dataset.n===n))}
 function openNew(date,time){
-  selectedDate=date;els.apptId.value='';els.person.value='';els.startTime.value=time;els.type.value='Interview';els.confirmationStatus.value='tentative';els.notes.value='';els.status.value='scheduled';els.statusField.style.display='none';els.cancelAppt.style.display='none';els.drawerTitle.textContent='Schedule appointment';els.drawerWhen.textContent=fmtDate(date);setDur(20);showDrawer();els.person.focus();
+  selectedDate=date;els.apptId.value='';els.person.value='';els.startTime.value=time;els.type.value='Interview';els.confirmationStatus.value='confirmed';els.notes.value='';els.status.value='scheduled';els.statusField.style.display='none';els.cancelAppt.style.display='none';els.drawerTitle.textContent='Schedule appointment';els.drawerWhen.textContent=fmtDate(date);setDur(15);showDrawer();els.person.focus();
 }
 function openExisting(a){
   selectedDate=localYmd(new Date(a.start_at));els.apptId.value=a.id;els.person.value=a.person_name;els.startTime.value=new Intl.DateTimeFormat('en-US',{timeZone:tz,hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(a.start_at));els.type.value=a.appointment_type;els.confirmationStatus.value=a.confirmation_status||'confirmed';els.notes.value=a.notes||'';els.status.value=a.status;els.statusField.style.display='block';els.cancelAppt.style.display=['bishop','scheduler'].includes(user.role)?'inline-block':'none';els.drawerTitle.textContent='Edit appointment';els.drawerWhen.textContent=fmtDate(selectedDate);setDur(Math.round((new Date(a.end_at)-new Date(a.start_at))/60000));showDrawer();
@@ -88,6 +88,7 @@ els.calendar.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e
   user=await requireUser();if(!user)return;nav(user);weekStart=mondayOf(new Date());
   els.durations.innerHTML=[10,15,20,30,45,60].map(n=>`<button type="button" class="duration" data-n="${n}">${n} min</button>`).join('');
   els.durations.onclick=e=>{const b=e.target.closest('.duration');if(b)setDur(+b.dataset.n)};
+  setDur(15);
   await load();
 })();
 
