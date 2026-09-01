@@ -1,17 +1,17 @@
-.recurring-item.compact{padding:7px 9px;margin:6px 0}
-.recurring-row{display:flex;align-items:center;gap:8px;min-width:0}
-.recurring-pick{min-width:0;flex:1 1 auto;cursor:pointer;border-radius:6px}
+.recurring-item.compact{position:relative;padding:7px 9px;margin:6px 0}
+.recurring-row{display:block;min-width:0;padding-right:190px}
+.recurring-pick{min-width:0;cursor:pointer;border-radius:6px}
 .recurring-pick:focus,.recurring-meta:focus{outline:2px solid #315d80;outline-offset:2px}
 .recurring-pick strong{display:block;font-size:14px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.recurring-meta{margin-top:2px;color:#465767;font-size:11px;line-height:1.2;cursor:pointer;width:max-content;max-width:100%;border-radius:4px}
-.recurring-actions{display:flex;flex:0 0 auto;gap:4px;margin:0;flex-wrap:nowrap}
+.recurring-meta{margin-top:2px;padding-right:190px;color:#465767;font-size:11px;line-height:1.2;cursor:pointer;width:100%;border-radius:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.recurring-actions{position:absolute;top:6px;right:7px;display:flex;gap:4px;margin:0;flex-wrap:nowrap;z-index:2}
 .recurring-actions .btn.mini{padding:7px 10px;min-height:39px;border-radius:7px;font-size:14px;line-height:1.1}
 .recurring-form-actions{display:flex;justify-content:flex-end;gap:8px}
 @media(max-width:800px){
   .recurring-item.compact{padding:6px 7px;margin:5px 0}
-  .recurring-row{gap:5px}
+  .recurring-row{padding-right:174px}
   .recurring-pick strong{font-size:13px}
-  .recurring-meta{font-size:10px}
-  .recurring-actions{gap:3px}
+  .recurring-meta{padding-right:174px;font-size:10px}
+  .recurring-actions{top:5px;right:6px;gap:3px}
   .recurring-actions .btn.mini{flex:0 0 auto;min-height:38px;padding:7px 9px;font-size:13px}
 }
