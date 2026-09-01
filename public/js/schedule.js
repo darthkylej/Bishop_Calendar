@@ -49,7 +49,11 @@ function render(){
   dates.forEach(d=>{const i=dateFromYmd(d).getDay();html+=`<div class="day-head ${d===today?'today':''}"><strong>${DAY[i]}</strong><span>${new Intl.DateTimeFormat('en-US',{month:'numeric',day:'numeric'}).format(dateFromYmd(d))}</span></div>`});
   for(let m=minM;m<maxM;m+=15){
     html+=`<div class="time-cell">${m%60===0?new Intl.DateTimeFormat('en-US',{hour:'numeric'}).format(new Date(2000,0,1,Math.floor(m/60))):''}</div>`;
-    dates.forEach(date=>{const p=preference(date,m),open=!!p&&['bishop','scheduler'].includes(user.role);html+=`<div class="slot ${p||''} ${open?'open':''}" data-date="${date}" data-time="${hm(m)}" ${open?'role="button" tabindex="0"':''}></div>`});
+    dates.forEach(date=>{
+      const p=preference(date,m);
+      const open=user.role==='bishop'||(user.role==='scheduler'&&!!p);
+      html+=`<div class="slot ${p||''} ${open?'open':''}" data-date="${date}" data-time="${hm(m)}" ${open?'role="button" tabindex="0"':''}></div>`;
+    });
   }
   html+='</div>';
   els.calendar.innerHTML=html;
