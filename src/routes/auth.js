@@ -1,14 +1,10 @@
 import { db } from '../lib/db.js';
 import { body, error, json } from '../lib/util.js';
-import { createSession, cookie, hashPassword, verifyPassword } from '../lib/auth.js';
-
-async function ensurePasswordFlag(sql){
-  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE`;
-}
+import { createSession, cookie, ensurePasswordSchema, hashPassword, verifyPassword } from '../lib/auth.js';
 
 export async function login(request, env) {
   const data = await body(request); if(!data) return error('Invalid request.');
-  const sql = db(env); await ensurePasswordFlag(sql);
+  const sql = db(env); await ensurePasswordSchema(sql);
   const rows = await sql`SELECT * FROM users WHERE lower(email)=lower(${String(data.email||'').trim()}) AND active=true`;
   const user = rows[0];
   if(!user || !await verifyPassword(String(data.password||''), user.password_hash)) return error('Incorrect email or password.',401);
@@ -23,7 +19,7 @@ export async function changePassword(request,env,user){
   const data=await body(request); if(!data) return error('Invalid request.');
   const newPassword=String(data.new_password||'');
   if(!newPassword) return error('Enter a new password.');
-  const sql=db(env); await ensurePasswordFlag(sql);
+  const sql=db(env); await ensurePasswordSchema(sql);
   const rows=await sql`SELECT id,name,email,role,password_hash,must_change_password FROM users WHERE id=${user.id} AND active=true`;
   const current=rows[0]; if(!current) return error('User not found.',404);
   if(!current.must_change_password){
@@ -41,7 +37,7 @@ export async function changePassword(request,env,user){
 export async function bootstrap(request, env) {
   const data=await body(request); if(!data) return error('Invalid request.');
   if(!env.BOOTSTRAP_SECRET || data.secret !== env.BOOTSTRAP_SECRET) return error('Invalid setup secret.',403);
-  const sql=db(env); await ensurePasswordFlag(sql); const count=await sql`SELECT count(*)::int AS n FROM users`;
+  const sql=db(env); await ensurePasswordSchema(sql); const count=await sql`SELECT count(*)::int AS n FROM users`;
   if(count[0].n>0) return error('Initial setup has already been completed.',409);
   const name=String(data.name||'').trim(), email=String(data.email||'').trim(), password=String(data.password||'');
   if(!name || !email.includes('@') || !password) return error('Enter a name, valid email, and password.');
