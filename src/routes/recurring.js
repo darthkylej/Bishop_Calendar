@@ -54,8 +54,35 @@ function inferCoveredDue(currentDue,appointmentDate,count,unit){
   while(previous>earlyLimit&&guard<500){candidate=previous;previous=retreat(candidate,count,unit);guard++;}
   return previous;
 }
+async function backfillDirectAppointments(sql){
+  const appointments=await sql`SELECT id,person_name,start_at FROM appointments
+    WHERE recurring_interview_id IS NULL
+      AND status='scheduled'
+      AND start_at>=now()
+    ORDER BY start_at,id`;
+  for(const appointment of appointments){
+    const name=String(appointment.person_name||'').trim(); if(!name) continue;
+    const matches=await sql`SELECT r.id,r.next_due_date
+      FROM recurring_interviews r
+      WHERE r.active=true
+        AND r.assigned_to_counselor IS NULL
+        AND r.person_name=${name}
+        AND NOT EXISTS (
+          SELECT 1 FROM appointments linked
+          WHERE linked.recurring_interview_id=r.id AND linked.status<>'cancelled'
+        )
+      ORDER BY r.next_due_date,r.id
+      LIMIT 2`;
+    if(matches.length!==1) continue;
+    const due=ymdValue(matches[0].next_due_date); if(!validYmd(due)) continue;
+    await sql`UPDATE appointments
+      SET recurring_interview_id=${matches[0].id},recurring_due_date=${due},updated_at=now()
+      WHERE id=${appointment.id} AND recurring_interview_id IS NULL`;
+  }
+}
 async function reconcileLegacyAppointments(sql){
   await ensureAppointmentSchema(sql);
+  await backfillDirectAppointments(sql);
   const rows=await sql`SELECT a.id AS appointment_id,a.start_at,a.recurring_interview_id,
       r.frequency_count,r.frequency_unit,r.next_due_date,r.one_time
     FROM appointments a
@@ -78,6 +105,22 @@ async function reconcileLegacyAppointments(sql){
       const next=nextCoveredDue(currentDue,appointmentDate,count,unit);
       if(next!==currentDue) await sql`UPDATE recurring_interviews SET next_due_date=${next},updated_at=now() WHERE id=${row.recurring_interview_id} AND next_due_date=${currentDue}::date`;
     }
+  }
+  const newlyLinked=await sql`SELECT a.id AS appointment_id,a.start_at,a.recurring_interview_id,a.recurring_due_date,
+      r.frequency_count,r.frequency_unit,r.next_due_date,r.one_time
+    FROM appointments a
+    JOIN recurring_interviews r ON r.id=a.recurring_interview_id
+    WHERE a.recurring_interview_id IS NOT NULL
+      AND a.recurring_due_date IS NOT NULL
+      AND a.status='scheduled'
+      AND a.start_at>=now()
+    ORDER BY a.start_at,a.id`;
+  for(const row of newlyLinked){
+    if(row.one_time) continue;
+    const currentDue=ymdValue(row.next_due_date),coveredDue=ymdValue(row.recurring_due_date),appointmentDate=ymdValue(row.start_at);
+    if(!validYmd(currentDue)||!validYmd(coveredDue)||!validYmd(appointmentDate)||currentDue!==coveredDue) continue;
+    const next=nextCoveredDue(currentDue,appointmentDate,Number(row.frequency_count),row.frequency_unit);
+    if(next!==currentDue) await sql`UPDATE recurring_interviews SET next_due_date=${next},updated_at=now() WHERE id=${row.recurring_interview_id} AND next_due_date=${currentDue}::date`;
   }
 }
 
