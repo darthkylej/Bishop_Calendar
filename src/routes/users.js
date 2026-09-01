@@ -5,7 +5,7 @@ export async function list(request,env,user){ if(!isBishop(user)) return error('
 export async function create(request,env,user){
   if(!isBishop(user)) return error('Forbidden.',403); const d=await body(request); if(!d)return error('Invalid request.');
   const name=String(d.name||'').trim(),email=String(d.email||'').trim(),password=String(d.password||''),role=String(d.role||'viewer');
-  if(!name||!email.includes('@')||password.length<8||!['bishop','scheduler','viewer'].includes(role)) return error('Invalid user details.');
+  if(!name||!email.includes('@')||!password||!['bishop','scheduler','viewer'].includes(role)) return error('Invalid user details.');
   const sql=db(env); try { const r=await sql`INSERT INTO users(name,email,password_hash,role) VALUES(${name},${email},${await hashPassword(password)},${role}) RETURNING id,name,email,role,active`; return json({user:r[0]},201); } catch(e){ if(String(e).includes('unique')) return error('That email is already in use.',409); throw e; }
 }
 export async function update(request,env,user,id){
