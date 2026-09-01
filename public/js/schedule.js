@@ -60,7 +60,7 @@ function render(){
     const row=Math.floor((sm-minM)/15),idx=cols+row*cols+1+di,cell=grid.children[idx];if(!cell)continue;
     const conf=a.confirmation_status||'confirmed',el=document.createElement('div');
     el.className=`appt ${conf}`;el.dataset.apptId=String(a.id);el.style.height=`${Math.max(42,(em-sm)/15*48-6)}px`;
-    el.innerHTML=`<strong>${esc(a.person_name)}</strong><span>${esc(fmtTime(a.start_at))} · ${esc(a.appointment_type)}</span>${conf==='tentative'?'<em>Tentative</em>':''}`;
+    el.innerHTML=`<span class="appt-time">${esc(fmtTime(a.start_at))}</span><strong class="appt-name">${esc(a.person_name)}</strong><span class="appt-type">${esc(a.appointment_type)}</span>${conf==='tentative'?'<em>Tentative</em>':''}`;
     cell.appendChild(el);
   }});
 }
