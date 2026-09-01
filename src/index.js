@@ -17,6 +17,8 @@ export default {
       const user=await getSession(request,env);
       if(path==='/api/me'&&method==='GET') return auth.me(request,env,user);
       if(!user) return error('Unauthorized.',401);
+      if(path==='/api/change-password'&&method==='POST') return auth.changePassword(request,env,user);
+      if(user.must_change_password) return error('Password change required.',403);
       if(path==='/api/week'&&method==='GET') return appointments.week(request,env,user);
       if(path==='/api/appointments'&&method==='POST') return appointments.create(request,env,user);
       let m;
