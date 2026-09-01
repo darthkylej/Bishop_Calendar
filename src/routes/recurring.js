@@ -38,15 +38,21 @@ export async function list(request,env,user){
   if(!validYmd(week)) return error('Invalid week.');
   const weekEnd=addDays(week,6),earlyEnd=addDays(weekEnd,14),sql=db(env); await ensureNeedSchema(sql);
   const rows=isBishop(user)
-    ? await sql`SELECT id,person_name,frequency_count,frequency_unit,next_due_date,one_time,assigned_to_counselor,active FROM recurring_interviews WHERE active=true ORDER BY next_due_date,person_name`
-    : await sql`SELECT id,person_name,frequency_count,frequency_unit,next_due_date,one_time,assigned_to_counselor,active FROM recurring_interviews WHERE active=true AND next_due_date <= ${earlyEnd}::date ORDER BY next_due_date,person_name`;
-  const items=rows.map(r=>{
+    ? await sql`SELECT r.id,r.person_name,r.frequency_count,r.frequency_unit,r.next_due_date,r.one_time,r.assigned_to_counselor,r.active,
+        EXISTS(SELECT 1 FROM appointments a WHERE a.recurring_interview_id=r.id AND a.status<>'cancelled') AS has_linked_appointment
+        FROM recurring_interviews r WHERE r.active=true ORDER BY r.next_due_date,r.person_name`
+    : await sql`SELECT r.id,r.person_name,r.frequency_count,r.frequency_unit,r.next_due_date,r.one_time,r.assigned_to_counselor,r.active,
+        EXISTS(SELECT 1 FROM appointments a WHERE a.recurring_interview_id=r.id AND a.status<>'cancelled') AS has_linked_appointment
+        FROM recurring_interviews r WHERE r.active=true AND r.next_due_date <= ${earlyEnd}::date ORDER BY r.next_due_date,r.person_name`;
+  const visibleRows=rows.filter(r=>!r.has_linked_appointment || (!r.one_time && ymdValue(r.next_due_date)<=earlyEnd));
+  const items=visibleRows.map(r=>{
     const due=ymdValue(r.next_due_date);
     if(!validYmd(due)) throw new Error('Invalid appointment-needed due date returned from database.');
     let state='upcoming',overdue_weeks=0;
     if(due<week){ state='overdue'; overdue_weeks=Math.max(1,Math.floor(dayDiff(due,week)/7)+1); }
     else if(due<=weekEnd) state='due';
-    return {...r,next_due_date:due,state,overdue_weeks};
+    const {has_linked_appointment,...item}=r;
+    return {...item,next_due_date:due,state,overdue_weeks};
   });
   return json({items,week,week_end:weekEnd,early_end:earlyEnd});
 }
