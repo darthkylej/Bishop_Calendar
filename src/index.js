@@ -27,6 +27,8 @@ export default {
       if(path==='/api/recurring'&&method==='GET') return recurring.list(request,env,user);
       if(path==='/api/recurring'&&method==='POST') return recurring.create(request,env,user);
       if((m=path.match(/^\/api\/recurring\/(\d+)$/))&&method==='PUT') return recurring.update(request,env,user,m[1]);
+      if((m=path.match(/^\/api\/recurring\/(\d+)\/assign$/))&&method==='POST') return recurring.assign(request,env,user,m[1]);
+      if((m=path.match(/^\/api\/recurring\/(\d+)\/complete$/))&&method==='POST') return recurring.complete(request,env,user,m[1]);
       if((m=path.match(/^\/api\/recurring\/(\d+)\/skip$/))&&method==='POST') return recurring.skip(request,env,user,m[1]);
       if((m=path.match(/^\/api\/recurring\/(\d+)$/))&&method==='DELETE') return recurring.remove(request,env,user,m[1]);
       if(path==='/api/availability/rules'&&method==='GET') return availability.listRules(request,env,user);
