@@ -1,17 +1,25 @@
 .recurring-item.compact{position:relative;padding:7px 9px;margin:6px 0}
-.recurring-row{display:block;min-width:0;padding-right:190px}
+.recurring-item.assigned{background:#d9e8ef;border-color:#5d879d;box-shadow:inset 4px 0 #315d80}
+.recurring-row{display:block;min-width:0;padding-right:250px}
 .recurring-pick{min-width:0;cursor:pointer;border-radius:6px}
 .recurring-pick:focus,.recurring-meta:focus{outline:2px solid #315d80;outline-offset:2px}
 .recurring-pick strong{display:block;font-size:14px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.recurring-meta{margin-top:2px;padding-right:190px;color:#465767;font-size:11px;line-height:1.2;cursor:pointer;width:100%;border-radius:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.recurring-item.assigned .recurring-pick strong{color:#173f61}
+.recurring-item.assigned .recurring-pick span,.recurring-item.assigned .recurring-meta{color:#294f65;font-weight:700}
+.recurring-meta{margin-top:2px;padding-right:250px;color:#465767;font-size:11px;line-height:1.2;cursor:pointer;width:100%;border-radius:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .recurring-actions{position:absolute;top:6px;right:7px;display:flex;gap:4px;margin:0;flex-wrap:nowrap;z-index:2}
 .recurring-actions .btn.mini{padding:7px 10px;min-height:39px;border-radius:7px;font-size:14px;line-height:1.1}
+.recurring-actions .assign-recurring{background:#315d80;border-color:#315d80;color:#fff}
+.recurring-actions .assign-recurring:hover{background:#244b69;border-color:#244b69}
 .recurring-form-actions{display:flex;justify-content:flex-end;gap:8px}
+.assignment-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(460px,calc(100vw - 28px));max-height:calc(100dvh - 28px);overflow:auto;padding:20px;box-shadow:0 16px 45px rgba(12,24,36,.30)}
+.assignment-card h2{margin:0 0 10px}.assignment-card p{line-height:1.45}.assignment-card .actions{position:static;background:transparent;padding:0;margin-top:16px}
 @media(max-width:800px){
   .recurring-item.compact{padding:6px 7px;margin:5px 0}
-  .recurring-row{padding-right:174px}
+  .recurring-row{padding-right:226px}
   .recurring-pick strong{font-size:13px}
-  .recurring-meta{padding-right:174px;font-size:10px}
+  .recurring-meta{padding-right:226px;font-size:10px}
   .recurring-actions{top:5px;right:6px;gap:3px}
-  .recurring-actions .btn.mini{flex:0 0 auto;min-height:38px;padding:7px 9px;font-size:13px}
+  .recurring-actions .btn.mini{flex:0 0 auto;min-height:38px;padding:7px 8px;font-size:12px}
+  .assignment-card{padding:16px;width:calc(100vw - 20px)}
 }
