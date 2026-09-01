@@ -4,7 +4,7 @@ const $=id=>document.getElementById(id);
 const els={
   weekTitle:$('weekTitle'),calendar:$('calendar'),prev:$('prev'),today:$('today'),next:$('next'),schedulePrompt:$('schedulePrompt'),
   recurringBtn:$('recurringBtn'),recurringDrawer:$('recurringDrawer'),closeRecurring:$('closeRecurring'),recurringWeek:$('recurringWeek'),recurringMsg:$('recurringMsg'),recurringList:$('recurringList'),recurringAdmin:$('recurringAdmin'),recurringAdminTitle:$('recurringAdminTitle'),recurringForm:$('recurringForm'),editingRecurringId:$('editingRecurringId'),recurringName:$('recurringName'),oneTime:$('oneTime'),frequencyFields:$('frequencyFields'),frequencyCount:$('frequencyCount'),frequencyUnit:$('frequencyUnit'),dueDateLabel:$('dueDateLabel'),firstDue:$('firstDue'),cancelRecurringEdit:$('cancelRecurringEdit'),recurringSubmit:$('recurringSubmit'),
-  assignmentDialog:$('assignmentDialog'),closeAssignment:$('closeAssignment'),assignmentTitle:$('assignmentTitle'),assignmentBody:$('assignmentBody'),assignmentForm:$('assignmentForm'),counselorName:$('counselorName'),assignmentComplete:$('assignmentComplete'),markAssignmentComplete:$('markAssignmentComplete'),
+  assignmentDialog:$('assignmentDialog'),closeAssignment:$('closeAssignment'),assignmentTitle:$('assignmentTitle'),assignmentBody:$('assignmentBody'),assignmentForm:$('assignmentForm'),counselorName:$('counselorName'),unassignCounselor:$('unassignCounselor'),assignmentComplete:$('assignmentComplete'),markAssignmentComplete:$('markAssignmentComplete'),
   drawer:$('drawer'),closeDrawer:$('closeDrawer'),drawerTitle:$('drawerTitle'),drawerWhen:$('drawerWhen'),drawerMsg:$('drawerMsg'),
   apptForm:$('apptForm'),apptId:$('apptId'),recurringId:$('recurringId'),person:$('person'),startTime:$('startTime'),durations:$('durations'),type:$('type'),
   confirmationStatus:$('confirmationStatus'),notes:$('notes'),statusField:$('statusField'),status:$('status'),cancelAppt:$('cancelAppt')
@@ -93,7 +93,7 @@ function recurringItemHtml(i){
   const overdue=i.state==='overdue',urgent=overdue&&i.overdue_weeks>=2,assigned=!!i.assigned_to_counselor,pickClass=assigned?'assigned-recurring-card':'choose-recurring-card';
   if(user.role!=='bishop')return `<div class="recurring-item ${i.state} ${urgent?'urgent':''} ${assigned?'assigned':''}"><div class="recurring-pick ${pickClass}" data-id="${i.id}" role="button" tabindex="0"><strong>${esc(i.person_name)}</strong><span>${assigned?`Assigned to ${esc(i.assigned_to_counselor)} · `:''}Due ${esc(shortDate(i.next_due_date))}</span></div></div>`;
   const skip=!assigned&&!i.one_time?`<button type="button" class="btn mini skip-recurring" data-id="${i.id}">Skip</button>`:'';
-  const assign=!assigned?`<button type="button" class="btn mini assign-recurring" data-id="${i.id}">Assign</button>`:'';
+  const assign=`<button type="button" class="btn mini assign-recurring" data-id="${i.id}">Assign</button>`;
   const assignment=assigned?`Assigned to ${esc(i.assigned_to_counselor)} · `:'';
   return `<div class="recurring-item compact ${i.state} ${urgent?'urgent':''} ${assigned?'assigned':''}"><div class="recurring-row"><div class="recurring-pick ${pickClass}" data-id="${i.id}" role="button" tabindex="0"><strong>${esc(i.person_name)}</strong></div><div class="recurring-actions"><button type="button" class="btn mini edit-recurring" data-id="${i.id}">Edit</button>${assign}${skip}<button type="button" class="btn mini danger remove-recurring" data-id="${i.id}">Remove</button></div></div><div class="recurring-meta ${pickClass}" data-id="${i.id}" role="button" tabindex="0">${assignment}Due ${esc(shortDate(i.next_due_date))} · ${esc(frequencyLabel(i))}</div></div>`;
 }
@@ -121,7 +121,7 @@ function openAssignment(item,assigning=false){
   assignmentItem=item;els.assignmentDialog.classList.add('show');const assigned=!!item.assigned_to_counselor;
   els.assignmentTitle.textContent=assigned?'Counselor assignment':'Assign to counselor';
   els.assignmentBody.innerHTML=assigned?`<p><strong>${esc(item.person_name)}</strong> has been assigned to <strong>${esc(item.assigned_to_counselor)}</strong>.</p><p class="subtle">Due ${esc(shortDate(item.next_due_date))}. This item is no longer schedulable on the bishop’s calendar.</p>`:`<p>Assign <strong>${esc(item.person_name)}</strong> to a counselor. The executive secretary will see the assignment and this item will no longer be schedulable on the bishop’s calendar.</p>`;
-  els.assignmentForm.hidden=assigned||user.role!=='bishop';els.assignmentComplete.hidden=!assigned;els.counselorName.value='';if(!assigned&&user.role==='bishop')setTimeout(()=>els.counselorName.focus(),0);
+  els.assignmentForm.hidden=user.role!=='bishop';els.assignmentComplete.hidden=!assigned;els.unassignCounselor.hidden=!assigned||user.role!=='bishop';els.counselorName.value=assigned?item.assigned_to_counselor:'';if(user.role==='bishop')setTimeout(()=>els.counselorName.focus(),0);
 }
 function closeAssignment(){els.assignmentDialog.classList.remove('show');assignmentItem=null;els.counselorName.value=''}
 
@@ -156,6 +156,10 @@ els.closeAssignment.onclick=closeAssignment;els.assignmentDialog.onclick=e=>{if(
 els.assignmentForm.onsubmit=async e=>{
   e.preventDefault();if(!assignmentItem)return;const counselor=els.counselorName.value.trim();if(!counselor)return;
   try{await api(`/api/recurring/${assignmentItem.id}/assign`,{method:'POST',body:JSON.stringify({counselor_name:counselor})});closeAssignment();await fetchRecurring();renderRecurring();await refreshRecurringBadge()}catch(x){els.assignmentBody.innerHTML+=`<div class="notice error">${esc(x.message)}</div>`}
+};
+els.unassignCounselor.onclick=async()=>{
+  if(!assignmentItem)return;if(!confirm(`Unassign ${assignmentItem.person_name} from ${assignmentItem.assigned_to_counselor}?`))return;
+  try{await api(`/api/recurring/${assignmentItem.id}/assign`,{method:'POST',body:JSON.stringify({counselor_name:''})});closeAssignment();await fetchRecurring();renderRecurring();await refreshRecurringBadge()}catch(x){els.assignmentBody.innerHTML+=`<div class="notice error">${esc(x.message)}</div>`}
 };
 els.markAssignmentComplete.onclick=async()=>{
   if(!assignmentItem)return;if(!confirm(`Mark ${assignmentItem.person_name} complete?`))return;
