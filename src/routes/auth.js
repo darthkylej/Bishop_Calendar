@@ -21,7 +21,7 @@ export async function bootstrap(request, env) {
   const sql=db(env); const count=await sql`SELECT count(*)::int AS n FROM users`;
   if(count[0].n>0) return error('Initial setup has already been completed.',409);
   const name=String(data.name||'').trim(), email=String(data.email||'').trim(), password=String(data.password||'');
-  if(!name || !email.includes('@') || password.length<8) return error('Enter a name, valid email, and password of at least 8 characters.');
+  if(!name || !email.includes('@') || !password) return error('Enter a name, valid email, and password.');
   const hash=await hashPassword(password);
   const rows=await sql`INSERT INTO users(name,email,password_hash,role) VALUES(${name},${email},${hash},'bishop') RETURNING id,name,email,role`;
   return json({user:rows[0]},201);
