@@ -26,7 +26,7 @@ async function sign(env, data) {
   return hex(new Uint8Array(await crypto.subtle.sign('HMAC', key, enc.encode(data))));
 }
 export async function createSession(env, user) {
-  const payload = b64url(JSON.stringify({ userId:user.id, exp:Date.now()+TWO_WEEKS }));
+  const payload = b64url(JSON.stringify({ userId:user.id, mustChangePassword:!!user.must_change_password, exp:Date.now()+TWO_WEEKS }));
   return `${payload}.${await sign(env,payload)}`;
 }
 export async function getSession(request, env) {
@@ -40,7 +40,7 @@ export async function getSession(request, env) {
   const sql = db(env);
   const rows = await sql`SELECT id,name,email,role,active FROM users WHERE id=${parsed.userId}`;
   if(!rows[0]?.active) return null;
-  return rows[0];
+  return {...rows[0],must_change_password:!!parsed.mustChangePassword};
 }
 export function cookie(token, clear=false) {
   return `session=${clear?'':token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${clear?0:TWO_WEEKS/1000}`;
