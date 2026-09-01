@@ -1,5 +1,5 @@
 .recurring-item.compact{position:relative;padding:7px 9px;margin:6px 0}
-.recurring-item.assigned{background:#d9e8ef;border-color:#5d879d;box-shadow:inset 4px 0 #315d80}
+.recurring-item.assigned,.recurring-item.overdue.assigned,.recurring-item.overdue.urgent.assigned{background:#d9e8ef;border-color:#5d879d;box-shadow:inset 4px 0 #315d80}
 .recurring-row{display:block;min-width:0;padding-right:250px}
 .recurring-pick{min-width:0;cursor:pointer;border-radius:6px}
 .recurring-pick:focus,.recurring-meta:focus{outline:2px solid #315d80;outline-offset:2px}
