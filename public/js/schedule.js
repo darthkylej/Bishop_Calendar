@@ -3,7 +3,7 @@ import{api,esc,requireUser,nav}from'./api.js';
 const $=id=>document.getElementById(id);
 const els={
   weekTitle:$('weekTitle'),calendar:$('calendar'),prev:$('prev'),today:$('today'),next:$('next'),schedulePrompt:$('schedulePrompt'),
-  recurringBtn:$('recurringBtn'),recurringDrawer:$('recurringDrawer'),closeRecurring:$('closeRecurring'),recurringWeek:$('recurringWeek'),recurringMsg:$('recurringMsg'),recurringList:$('recurringList'),recurringAdmin:$('recurringAdmin'),recurringAdminTitle:$('recurringAdminTitle'),recurringForm:$('recurringForm'),editingRecurringId:$('editingRecurringId'),recurringName:$('recurringName'),frequencyCount:$('frequencyCount'),frequencyUnit:$('frequencyUnit'),firstDue:$('firstDue'),cancelRecurringEdit:$('cancelRecurringEdit'),recurringSubmit:$('recurringSubmit'),
+  recurringBtn:$('recurringBtn'),recurringDrawer:$('recurringDrawer'),closeRecurring:$('closeRecurring'),recurringWeek:$('recurringWeek'),recurringMsg:$('recurringMsg'),recurringList:$('recurringList'),recurringAdmin:$('recurringAdmin'),recurringAdminTitle:$('recurringAdminTitle'),recurringForm:$('recurringForm'),editingRecurringId:$('editingRecurringId'),recurringName:$('recurringName'),oneTime:$('oneTime'),frequencyFields:$('frequencyFields'),frequencyCount:$('frequencyCount'),frequencyUnit:$('frequencyUnit'),dueDateLabel:$('dueDateLabel'),firstDue:$('firstDue'),cancelRecurringEdit:$('cancelRecurringEdit'),recurringSubmit:$('recurringSubmit'),
   drawer:$('drawer'),closeDrawer:$('closeDrawer'),drawerTitle:$('drawerTitle'),drawerWhen:$('drawerWhen'),drawerMsg:$('drawerMsg'),
   apptForm:$('apptForm'),apptId:$('apptId'),recurringId:$('recurringId'),person:$('person'),startTime:$('startTime'),durations:$('durations'),type:$('type'),
   confirmationStatus:$('confirmationStatus'),notes:$('notes'),statusField:$('statusField'),status:$('status'),cancelAppt:$('cancelAppt')
@@ -82,7 +82,7 @@ function openExisting(a){
 }
 async function load(){data=await api(`/api/week?start=${weekStart}`);render();await refreshRecurringBadge()}
 
-function frequencyLabel(i){const n=Number(i.frequency_count),unit=String(i.frequency_unit||'').replace(/s$/,'');return`Every ${n} ${unit}${n===1?'':'s'}`}
+function frequencyLabel(i){if(i.one_time)return'One time';const n=Number(i.frequency_count),unit=String(i.frequency_unit||'').replace(/s$/,'');return`Every ${n} ${unit}${n===1?'':'s'}`}
 async function fetchRecurring(){recurringData=await api(`/api/recurring?week=${weekStart}`);return recurringData}
 async function refreshRecurringBadge(){
   if(!['bishop','scheduler'].includes(user.role)){els.recurringBtn.hidden=true;return}
@@ -91,19 +91,23 @@ async function refreshRecurringBadge(){
 function recurringItemHtml(i){
   const overdue=i.state==='overdue',urgent=overdue&&i.overdue_weeks>=2;
   if(user.role!=='bishop')return `<div class="recurring-item ${i.state} ${urgent?'urgent':''}"><div class="recurring-pick choose-recurring-card" data-id="${i.id}" role="button" tabindex="0"><strong>${esc(i.person_name)}</strong><span>Due ${esc(shortDate(i.next_due_date))}</span></div></div>`;
-  return `<div class="recurring-item compact ${i.state} ${urgent?'urgent':''}"><div class="recurring-row"><div class="recurring-pick choose-recurring-card" data-id="${i.id}" role="button" tabindex="0"><strong>${esc(i.person_name)}</strong></div><div class="recurring-actions"><button type="button" class="btn mini edit-recurring" data-id="${i.id}">Edit</button><button type="button" class="btn mini skip-recurring" data-id="${i.id}">Skip</button><button type="button" class="btn mini danger remove-recurring" data-id="${i.id}">Remove</button></div></div><div class="recurring-meta choose-recurring-card" data-id="${i.id}" role="button" tabindex="0">Due ${esc(shortDate(i.next_due_date))} · ${esc(frequencyLabel(i))}</div></div>`;
+  const skip=i.one_time?'':`<button type="button" class="btn mini skip-recurring" data-id="${i.id}">Skip</button>`;
+  return `<div class="recurring-item compact ${i.state} ${urgent?'urgent':''}"><div class="recurring-row"><div class="recurring-pick choose-recurring-card" data-id="${i.id}" role="button" tabindex="0"><strong>${esc(i.person_name)}</strong></div><div class="recurring-actions"><button type="button" class="btn mini edit-recurring" data-id="${i.id}">Edit</button>${skip}<button type="button" class="btn mini danger remove-recurring" data-id="${i.id}">Remove</button></div></div><div class="recurring-meta choose-recurring-card" data-id="${i.id}" role="button" tabindex="0">Due ${esc(shortDate(i.next_due_date))} · ${esc(frequencyLabel(i))}</div></div>`;
 }
 function renderRecurring(){
   const items=recurringData?.items||[];
-  els.recurringWeek.textContent=user.role==='bishop'?'All recurring interviews · soonest due first':`${shortDate(weekStart)} – ${shortDate(addDays(weekStart,6))}`;
-  if(!items.length){els.recurringList.innerHTML='<div class="empty">No recurring interviews to show.</div>';return}
+  els.recurringWeek.textContent=user.role==='bishop'?'All appointment needs · soonest due first':`${shortDate(weekStart)} – ${shortDate(addDays(weekStart,6))}`;
+  if(!items.length){els.recurringList.innerHTML='<div class="empty">No appointments needed to show.</div>';return}
   els.recurringList.innerHTML=items.map(recurringItemHtml).join('');
 }
+function syncNeedType(){
+  const one=els.oneTime.checked;els.frequencyFields.hidden=one;els.frequencyCount.disabled=one;els.frequencyUnit.disabled=one;els.dueDateLabel.textContent=one?'Due date':'Next due date';
+}
 function resetRecurringForm(){
-  els.editingRecurringId.value='';els.recurringAdminTitle.textContent='Add recurring interview';els.recurringSubmit.textContent='Add recurring interview';els.cancelRecurringEdit.hidden=true;els.recurringName.value='';els.frequencyCount.value='1';els.frequencyUnit.value='months';els.firstDue.value=weekStart;
+  els.editingRecurringId.value='';els.recurringAdminTitle.textContent='Add appointment need';els.recurringSubmit.textContent='Add appointment need';els.cancelRecurringEdit.hidden=true;els.recurringName.value='';els.oneTime.checked=false;els.frequencyCount.value='1';els.frequencyUnit.value='months';els.firstDue.value=weekStart;syncNeedType();
 }
 function editRecurring(item){
-  els.editingRecurringId.value=item.id;els.recurringAdminTitle.textContent='Edit recurring interview';els.recurringSubmit.textContent='Save changes';els.cancelRecurringEdit.hidden=false;els.recurringName.value=item.person_name;els.frequencyCount.value=item.frequency_count;els.frequencyUnit.value=item.frequency_unit;els.firstDue.value=item.next_due_date;els.recurringAdmin.scrollIntoView({behavior:'smooth',block:'start'});els.recurringName.focus();
+  els.editingRecurringId.value=item.id;els.recurringAdminTitle.textContent='Edit appointment need';els.recurringSubmit.textContent='Save changes';els.cancelRecurringEdit.hidden=false;els.recurringName.value=item.person_name;els.oneTime.checked=!!item.one_time;els.frequencyCount.value=item.frequency_count;els.frequencyUnit.value=item.frequency_unit;els.firstDue.value=item.next_due_date;syncNeedType();els.recurringAdmin.scrollIntoView({behavior:'smooth',block:'start'});els.recurringName.focus();
 }
 async function openRecurring(){
   els.recurringMsg.innerHTML='';els.recurringDrawer.classList.add('show');els.recurringAdmin.hidden=user.role!=='bishop';if(user.role==='bishop'&&!els.firstDue.value)resetRecurringForm();
@@ -124,20 +128,21 @@ els.recurringList.addEventListener('click',async e=>{
   if(action){const item=recurringData?.items.find(i=>String(i.id)===action.dataset.id);if(!item)return;
     if(action.classList.contains('edit-recurring')){editRecurring(item);return}
     if(action.classList.contains('skip-recurring')){if(!confirm(`Skip this occurrence for ${item.person_name}?`))return;try{await api(`/api/recurring/${item.id}/skip`,{method:'POST'});await fetchRecurring();renderRecurring();await refreshRecurringBadge()}catch(x){els.recurringMsg.innerHTML=`<div class="notice error">${esc(x.message)}</div>`}return}
-    if(action.classList.contains('remove-recurring')){if(!confirm(`Remove ${item.person_name} from recurring interviews?`))return;try{await api(`/api/recurring/${item.id}`,{method:'DELETE'});await fetchRecurring();renderRecurring();await refreshRecurringBadge()}catch(x){els.recurringMsg.innerHTML=`<div class="notice error">${esc(x.message)}</div>`}return}
+    if(action.classList.contains('remove-recurring')){if(!confirm(`Remove ${item.person_name} from Appointments Needed?`))return;try{await api(`/api/recurring/${item.id}`,{method:'DELETE'});await fetchRecurring();renderRecurring();await refreshRecurringBadge()}catch(x){els.recurringMsg.innerHTML=`<div class="notice error">${esc(x.message)}</div>`}return}
   }
   const pick=e.target.closest('.choose-recurring-card');if(!pick)return;const item=recurringData?.items.find(i=>String(i.id)===pick.dataset.id);if(item){setPending(item);closeRecurring()}
 });
 els.recurringList.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('.choose-recurring-card')){e.preventDefault();const item=recurringData?.items.find(i=>String(i.id)===e.target.dataset.id);if(item){setPending(item);closeRecurring()}}});
+els.oneTime.onchange=syncNeedType;
 els.cancelRecurringEdit.onclick=resetRecurringForm;
 els.recurringForm.onsubmit=async e=>{
-  e.preventDefault();els.recurringMsg.innerHTML='';const payload={person_name:els.recurringName.value,frequency_count:Number(els.frequencyCount.value),frequency_unit:els.frequencyUnit.value,next_due_date:els.firstDue.value},id=els.editingRecurringId.value;
+  e.preventDefault();els.recurringMsg.innerHTML='';const payload={person_name:els.recurringName.value,one_time:els.oneTime.checked,next_due_date:els.firstDue.value};if(!els.oneTime.checked){payload.frequency_count=Number(els.frequencyCount.value);payload.frequency_unit=els.frequencyUnit.value}const id=els.editingRecurringId.value;
   try{if(id)await api(`/api/recurring/${id}`,{method:'PUT',body:JSON.stringify(payload)});else await api('/api/recurring',{method:'POST',body:JSON.stringify(payload)});resetRecurringForm();await fetchRecurring();renderRecurring();await refreshRecurringBadge();els.recurringName.focus()}catch(x){els.recurringMsg.innerHTML=`<div class="notice error">${esc(x.message)}</div>`}
 };
 
 (async()=>{
   user=await requireUser();if(!user)return;nav(user);weekStart=mondayOf(new Date());
-  els.durations.innerHTML=[10,15,20,30,45,60].map(n=>`<button type="button" class="duration" data-n="${n}">${n} min</button>`).join('');els.durations.onclick=e=>{const b=e.target.closest('.duration');if(b)setDur(+b.dataset.n)};setDur(15);await load();
+  els.durations.innerHTML=[10,15,20,30,45,60].map(n=>`<button type="button" class="duration" data-n="${n}">${n} min</button>`).join('');els.durations.onclick=e=>{const b=e.target.closest('.duration');if(b)setDur(+b.dataset.n)};setDur(15);syncNeedType();await load();
 })();
 
 els.prev.onclick=async()=>{weekStart=addDays(weekStart,-7);clearPending();await load()};
