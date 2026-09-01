@@ -35,8 +35,12 @@ async function isAvailable(sql,startAt,endAt,tz){
 }
 async function coverRecurring(sql,id,appointmentDate){
   if(!id) return;
-  const row=(await sql`SELECT id,frequency_count,frequency_unit,next_due_date FROM recurring_interviews WHERE id=${id} AND active=true`)[0];
+  const row=(await sql`SELECT id,frequency_count,frequency_unit,next_due_date,one_time FROM recurring_interviews WHERE id=${id} AND active=true`)[0];
   if(!row) return;
+  if(row.one_time){
+    await sql`UPDATE recurring_interviews SET active=false,updated_at=now() WHERE id=${id}`;
+    return;
+  }
   let due=ymdValue(row.next_due_date); if(!due)throw new Error('Recurring interview has an invalid due date.');
   let earlyLimit=addDays(appointmentDate,14),guard=0;
   if(due>earlyLimit) return;
@@ -57,7 +61,7 @@ export async function create(request,env,user){
   const settings=await sql`SELECT key,value FROM settings`; const sm=Object.fromEntries(settings.map(x=>[x.key,x.value])); const tz=sm.timezone||'America/Chicago';
   if(!isBishop(user) && !await isAvailable(sql,d.start_at,d.end_at,tz)) return error('That time is outside the bishop’s available hours.',409);
   const recurringId=d.recurring_interview_id?Number(d.recurring_interview_id):null;
-  if(recurringId){ const rr=(await sql`SELECT id FROM recurring_interviews WHERE id=${recurringId} AND active=true`)[0]; if(!rr)return error('That recurring interview is no longer active.',409); }
+  if(recurringId){ const rr=(await sql`SELECT id FROM recurring_interviews WHERE id=${recurringId} AND active=true`)[0]; if(!rr)return error('That appointment need is no longer active.',409); }
   try{
     const r=await sql`INSERT INTO appointments(start_at,end_at,person_name,appointment_type,notes,confirmation_status,recurring_interview_id,created_by,updated_by) VALUES(${d.start_at},${d.end_at},${String(d.person_name||'').trim()},${d.appointment_type||'Interview'},${d.notes||null},${confirmation(d.confirmation_status)},${recurringId},${user.id},${user.id}) RETURNING *`;
     if(recurringId) await coverRecurring(sql,recurringId,ymd(new Date(d.start_at),tz));
