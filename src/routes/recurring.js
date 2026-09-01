@@ -33,9 +33,9 @@ export async function list(request,env,user){
   const u=new URL(request.url),week=u.searchParams.get('week');
   if(!validYmd(week)) return error('Invalid week.');
   const weekEnd=addDays(week,6),earlyEnd=addDays(weekEnd,14),sql=db(env);
-  const rows=await sql`SELECT id,person_name,frequency_count,frequency_unit,next_due_date,active
-    FROM recurring_interviews WHERE active=true AND next_due_date <= ${earlyEnd}::date
-    ORDER BY next_due_date,person_name`;
+  const rows=isBishop(user)
+    ? await sql`SELECT id,person_name,frequency_count,frequency_unit,next_due_date,active FROM recurring_interviews WHERE active=true ORDER BY next_due_date,person_name`
+    : await sql`SELECT id,person_name,frequency_count,frequency_unit,next_due_date,active FROM recurring_interviews WHERE active=true AND next_due_date <= ${earlyEnd}::date ORDER BY next_due_date,person_name`;
   const items=rows.map(r=>{
     const due=ymdValue(r.next_due_date);
     if(!validYmd(due)) throw new Error('Invalid recurring interview due date returned from database.');
