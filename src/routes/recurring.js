@@ -2,7 +2,10 @@ import { db } from '../lib/db.js';
 import { body, error, json } from '../lib/util.js';
 import { canSchedule, isBishop } from '../lib/auth.js';
 
-async function ensureNeedSchema(sql){ await sql`ALTER TABLE recurring_interviews ADD COLUMN IF NOT EXISTS one_time BOOLEAN NOT NULL DEFAULT FALSE`; }
+async function ensureNeedSchema(sql){
+  await sql`ALTER TABLE recurring_interviews ADD COLUMN IF NOT EXISTS one_time BOOLEAN NOT NULL DEFAULT FALSE`;
+  await sql`ALTER TABLE recurring_interviews ADD COLUMN IF NOT EXISTS assigned_to_counselor TEXT`;
+}
 function validYmd(s){ return /^\d{4}-\d{2}-\d{2}$/.test(String(s||'')); }
 function ymdValue(v){
   if(v instanceof Date && Number.isFinite(+v)) return v.toISOString().slice(0,10);
@@ -35,8 +38,8 @@ export async function list(request,env,user){
   if(!validYmd(week)) return error('Invalid week.');
   const weekEnd=addDays(week,6),earlyEnd=addDays(weekEnd,14),sql=db(env); await ensureNeedSchema(sql);
   const rows=isBishop(user)
-    ? await sql`SELECT id,person_name,frequency_count,frequency_unit,next_due_date,one_time,active FROM recurring_interviews WHERE active=true ORDER BY next_due_date,person_name`
-    : await sql`SELECT id,person_name,frequency_count,frequency_unit,next_due_date,one_time,active FROM recurring_interviews WHERE active=true AND next_due_date <= ${earlyEnd}::date ORDER BY next_due_date,person_name`;
+    ? await sql`SELECT id,person_name,frequency_count,frequency_unit,next_due_date,one_time,assigned_to_counselor,active FROM recurring_interviews WHERE active=true ORDER BY next_due_date,person_name`
+    : await sql`SELECT id,person_name,frequency_count,frequency_unit,next_due_date,one_time,assigned_to_counselor,active FROM recurring_interviews WHERE active=true AND next_due_date <= ${earlyEnd}::date ORDER BY next_due_date,person_name`;
   const items=rows.map(r=>{
     const due=ymdValue(r.next_due_date);
     if(!validYmd(due)) throw new Error('Invalid appointment-needed due date returned from database.');
@@ -74,10 +77,38 @@ export async function update(request,env,user,id){
   return json({item:{...r[0],next_due_date:ymdValue(r[0].next_due_date)}});
 }
 
+export async function assign(request,env,user,id){
+  if(!isBishop(user)) return error('Forbidden.',403);
+  const d=await body(request); if(!d) return error('Invalid request.');
+  const counselor=String(d.counselor_name||'').trim();
+  if(!counselor) return error('Enter the counselor name.');
+  const sql=db(env); await ensureNeedSchema(sql);
+  const r=await sql`UPDATE recurring_interviews SET assigned_to_counselor=${counselor},updated_at=now() WHERE id=${id} AND active=true RETURNING *`;
+  if(!r[0]) return error('Appointment need not found.',404);
+  return json({item:{...r[0],next_due_date:ymdValue(r[0].next_due_date)}});
+}
+
+export async function complete(request,env,user,id){
+  if(!canSchedule(user)) return error('Forbidden.',403);
+  const sql=db(env); await ensureNeedSchema(sql);
+  const row=(await sql`SELECT * FROM recurring_interviews WHERE id=${id} AND active=true`)[0];
+  if(!row) return error('Appointment need not found.',404);
+  if(!row.assigned_to_counselor) return error('This appointment need is not assigned to a counselor.',409);
+  if(row.one_time){
+    await sql`UPDATE recurring_interviews SET active=false,assigned_to_counselor=NULL,updated_at=now() WHERE id=${id}`;
+    return json({ok:true,closed:true});
+  }
+  const due=ymdValue(row.next_due_date); if(!validYmd(due)) return error('Appointment need has an invalid due date.',500);
+  const next=advance(due,Number(row.frequency_count),row.frequency_unit);
+  const r=await sql`UPDATE recurring_interviews SET next_due_date=${next},assigned_to_counselor=NULL,updated_at=now() WHERE id=${id} RETURNING *`;
+  return json({ok:true,closed:false,item:{...r[0],next_due_date:ymdValue(r[0].next_due_date)}});
+}
+
 export async function skip(request,env,user,id){
   if(!isBishop(user)) return error('Forbidden.',403);
   const sql=db(env); await ensureNeedSchema(sql); const row=(await sql`SELECT * FROM recurring_interviews WHERE id=${id} AND active=true`)[0];
   if(!row) return error('Recurring interview not found.',404);
+  if(row.assigned_to_counselor) return error('Assigned appointment needs cannot be skipped.',409);
   if(row.one_time) return error('One-time appointment needs cannot be skipped. Remove it instead.',409);
   const due=ymdValue(row.next_due_date); if(!validYmd(due)) return error('Recurring interview has an invalid due date.',500);
   const next=advance(due,Number(row.frequency_count),row.frequency_unit);
