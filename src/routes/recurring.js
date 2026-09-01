@@ -107,11 +107,10 @@ export async function skip(request,env,user,id){
   if(!isBishop(user)) return error('Forbidden.',403);
   const sql=db(env); await ensureNeedSchema(sql); const row=(await sql`SELECT * FROM recurring_interviews WHERE id=${id} AND active=true`)[0];
   if(!row) return error('Recurring interview not found.',404);
-  if(row.assigned_to_counselor) return error('Assigned appointment needs cannot be skipped.',409);
   if(row.one_time) return error('One-time appointment needs cannot be skipped. Remove it instead.',409);
   const due=ymdValue(row.next_due_date); if(!validYmd(due)) return error('Recurring interview has an invalid due date.',500);
   const next=advance(due,Number(row.frequency_count),row.frequency_unit);
-  const r=await sql`UPDATE recurring_interviews SET next_due_date=${next},updated_at=now() WHERE id=${id} RETURNING *`;
+  const r=await sql`UPDATE recurring_interviews SET next_due_date=${next},assigned_to_counselor=NULL,updated_at=now() WHERE id=${id} RETURNING *`;
   return json({item:{...r[0],next_due_date:ymdValue(r[0].next_due_date)}});
 }
 
