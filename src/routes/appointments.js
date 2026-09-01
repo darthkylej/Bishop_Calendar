@@ -7,7 +7,14 @@ function ymd(date,tz){ const p=new Intl.DateTimeFormat('en-CA',{timeZone:tz,year
 function dow(date,tz){ const name=new Intl.DateTimeFormat('en-US',{timeZone:tz,weekday:'short'}).format(date); return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(name); }
 function min(t){ const [h,m]=String(t).slice(0,5).split(':').map(Number); return h*60+m; }
 function confirmation(v, fallback='confirmed'){ return ['tentative','confirmed'].includes(v) ? v : fallback; }
-function dateUtc(s){ const [y,m,d]=String(s).split('-').map(Number); return new Date(Date.UTC(y,m-1,d)); }
+function ymdValue(v){
+  if(v instanceof Date && Number.isFinite(+v)) return v.toISOString().slice(0,10);
+  const s=String(v??''),m=s.match(/^(\d{4}-\d{2}-\d{2})/);
+  if(m) return m[1];
+  const d=new Date(s);
+  return Number.isFinite(+d)?d.toISOString().slice(0,10):'';
+}
+function dateUtc(s){ const v=ymdValue(s); if(!v)return new Date(NaN); const [y,m,d]=v.split('-').map(Number); return new Date(Date.UTC(y,m-1,d)); }
 function ymdUtc(d){ return d.toISOString().slice(0,10); }
 function addDays(s,n){ const d=dateUtc(s); d.setUTCDate(d.getUTCDate()+n); return ymdUtc(d); }
 function advanceDate(s,count,unit){ const d=dateUtc(s); if(unit==='days')d.setUTCDate(d.getUTCDate()+count); else if(unit==='weeks')d.setUTCDate(d.getUTCDate()+count*7); else d.setUTCMonth(d.getUTCMonth()+count); return ymdUtc(d); }
@@ -30,7 +37,8 @@ async function coverRecurring(sql,id,appointmentDate){
   if(!id) return;
   const row=(await sql`SELECT id,frequency_count,frequency_unit,next_due_date FROM recurring_interviews WHERE id=${id} AND active=true`)[0];
   if(!row) return;
-  let due=String(row.next_due_date).slice(0,10),earlyLimit=addDays(appointmentDate,14),guard=0;
+  let due=ymdValue(row.next_due_date); if(!due)throw new Error('Recurring interview has an invalid due date.');
+  let earlyLimit=addDays(appointmentDate,14),guard=0;
   if(due>earlyLimit) return;
   do { due=advanceDate(due,Number(row.frequency_count),row.frequency_unit); guard++; }
   while(due<=earlyLimit&&guard<500);
